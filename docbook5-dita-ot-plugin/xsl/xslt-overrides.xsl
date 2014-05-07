@@ -5,11 +5,10 @@
 
     <!-- ********************************** -->
     <!-- Add a fake template to hold the place of build.original.id.reference.  -->
+    <!-- This seems to be called only at the root of the document tree. Not sure what it's doing at the moment. -->
     <!-- ********************************** -->
     
-    <xsl:template name="build.original.id.reference">
-      <xsl:message>Invoking noop template named build.original.id.reference.</xsl:message>
-    </xsl:template>
+    <xsl:template name="build.original.id.reference" />
 
 
     <!-- ********************************** -->
@@ -296,6 +295,10 @@
                     <!-- <xsl:message>ELEMENT xtrf includes backslash. Reduced: <xsl:value-of select="tokenize(parent::*/@xtrf, '\\')[last()]" /></xsl:message> -->
                     <xsl:value-of select="tokenize(parent::*/@xtrf, '\\')[last()]" />
                 </xsl:when>
+                <xsl:when test="contains(parent::*/@xtrf, '/')">
+                    <!-- <xsl:message>ELEMENT xtrf includes backslash. Reduced: <xsl:value-of select="tokenize(parent::*/@xtrf, '/')[last()]" /></xsl:message> -->
+                    <xsl:value-of select="tokenize(parent::*/@xtrf, '/')[last()]" />
+                </xsl:when>
                 <xsl:otherwise>
                     <!-- <xsl:message>ELEMENT xtrf filename only: <xsl:value-of select="parent::*/@xtrf" /></xsl:message> -->
                     <xsl:value-of select="parent::*/@xtrf" />
@@ -481,6 +484,10 @@
                 <!-- <xsl:message>XREF includes backslash: <xsl:value-of select="$linked.file.xtrf" /></xsl:message> -->
                 <xsl:value-of select="tokenize($linked.file.xtrf, '\\')[last()]" />
             </xsl:when>
+            <xsl:when test="contains($linked.file.xtrf, '/')">
+                <!-- <xsl:message>XREF includes backslash: <xsl:value-of select="$linked.file.xtrf" /></xsl:message> -->
+                <xsl:value-of select="tokenize($linked.file.xtrf, '/')[last()]" />
+            </xsl:when>
             <xsl:otherwise>
                 <!-- <xsl:message>XREF filename only: <xsl:value-of select="$linked.file.xtrf" /> Element name: <xsl:value-of select="$href" /></xsl:message> -->
                 <xsl:value-of select="$linked.file.xtrf" />
@@ -557,5 +564,4 @@
       </xsl:element>
     </xsl:template>
 
-      
 </xsl:stylesheet>
