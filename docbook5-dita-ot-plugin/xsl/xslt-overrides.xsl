@@ -1,14 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns="http://docbook.org/ns/docbook" xmlns:xlink="http://www.w3.org/1999/xlink">
 
-<xsl:import href="map2docbook.xsl"/>
+    <xsl:import href="map2docbook.xsl"/>
 
+     
     <!-- ********************************** -->
-    <!-- Add a fake template to hold the place of build.original.id.reference.  -->
-    <!-- This seems to be called only at the root of the document tree. Not sure what it's doing at the moment. -->
+    <!-- Write a temporary node set that holds each topicref with a duplicate href value. -->
     <!-- ********************************** -->
+     
+    <xsl:param name="id.reference">
+      <xsl:apply-templates select="document(base-uri())" mode="build.id.reference" />
+    </xsl:param>
+
+    <xsl:template match="/" mode="build.id.reference">
+       <xsl:message>Building reference node set of topicref elements in <xsl:value-of select="base-uri()" /> that have duplicate @href values</xsl:message>
+       <xsl:element name="duplicate.hrefs">
+        <xsl:apply-templates mode="build.id.reference" />
+      </xsl:element>
+    </xsl:template>
     
-    <xsl:template name="build.original.id.reference" />
+    <xsl:template match="*[@href]" mode="build.id.reference">
+      <xsl:param name="map.gen.id" />
+      
+      <xsl:variable name="current.map.gen.id">
+        <xsl:value-of select="$map.gen.id" />
+        <xsl:value-of select="generate-id()" />
+        <xsl:text>_</xsl:text>
+      </xsl:variable>
+      
+      <xsl:variable name="current.href" select="@href" />
+      
+      <xsl:variable name="number.duplicates" select="count(//*[@href = $current.href])" />
+      
+      <xsl:if test="$number.duplicates > 1">
+        <!--<xsl:message>MY HREF: <xsl:value-of select="$current.href" /> NUMBER MATCHING: <xsl:value-of select="$number.duplicates" /></xsl:message> -->
+        <xsl:element name="{name()}">
+          <xsl:attribute name="generated.id" select="$current.map.gen.id" />
+          <xsl:copy-of select="@href" />
+        </xsl:element>
+      </xsl:if>
+      
+      <xsl:apply-templates mode="build.id.reference">
+        <xsl:with-param name="map.gen.id" select="$current.map.gen.id" />
+      </xsl:apply-templates>
+      
+    </xsl:template>
+    
+    <xsl:template match="*" mode="build.id.reference">
+      <xsl:param name="map.gen.id" tunnel="yes" />
+      <xsl:apply-templates mode="build.id.reference">
+        <xsl:with-param name="map.gen.id" select="$map.gen.id" />
+      </xsl:apply-templates>
+    </xsl:template>
+    
+    <xsl:template match="text()" mode="build.id.reference" />
 
 
     <!-- ********************************** -->
@@ -210,11 +255,13 @@
     <xsl:template match="*[contains(@class,' topic/topic ')]">
       <xsl:param name="childrefs"/>
       <xsl:param name="element" select="'section'"/>
-      <xsl:param name="map.gen.id" />
+      <xsl:param name="map.gen.id" tunnel="yes" />
+      <xsl:param name="map.href" tunnel="yes"/>
       <xsl:element name="{$element}">
         <xsl:call-template name="setStandardAttr">
           <xsl:with-param name="IDPrefix" select="''"/>
-          <!-- <xsl:with-param name="map.gen.id" select="$map.gen.id" /> -->
+          <xsl:with-param name="map.gen.id" select="$map.gen.id" tunnel="yes" />
+          <xsl:with-param name="map.href" select="$map.href" tunnel="yes" />
         </xsl:call-template>
         <xsl:apply-templates select="*[contains(@class,' topic/title ')]"/>
         <xsl:apply-templates select="*[contains(@class,' topic/prolog ')]">
@@ -240,7 +287,9 @@
     
     <xsl:template name="setStandardAttr">
       <xsl:param name="IDPrefix" select="local-name(.)"/>
-      <xsl:param name="map.gen.id" />
+      <xsl:param name="map.gen.id" tunnel="yes" />
+      <xsl:param name="map.href" tunnel="yes"/>
+      <!--
       <xsl:variable name="map.id.and.prefix">
         <xsl:choose>
             <xsl:when test="$map.gen.id != '' and not(contains(@class, ' topic/topic '))">
@@ -250,7 +299,7 @@
                 <xsl:value-of select="$IDPrefix" />
             </xsl:otherwise>
         </xsl:choose>
-      </xsl:variable>
+      </xsl:variable> -->
       <xsl:if test="not( @id )">
         <!-- Don't generate an ID if there isn't one. Doing that causes problems when a file is included more than once. -->
         <!-- <xsl:attribute name="xml:id">
@@ -269,7 +318,8 @@
       </xsl:attribute>
       <xsl:for-each select="@*">
         <xsl:call-template name="testStandardAttr">
-          <xsl:with-param name="IDPrefix" select="$map.id.and.prefix"/>
+          <xsl:with-param name="map.gen.id" select="$map.gen.id" tunnel="yes" />
+          <xsl:with-param name="map.href" select="$map.href" tunnel="yes" />
         </xsl:call-template>
       </xsl:for-each>
     </xsl:template>
@@ -279,9 +329,10 @@
     <!-- ********************************** -->
     
     <xsl:template name="testStandardAttr">
-      <xsl:param name="IDPrefix"/>
+      <xsl:param name="IDPrefix " />
       <xsl:param name="attrName" select="local-name(.)"/>
       <xsl:param name="map.gen.id" tunnel="yes"/>
+      <xsl:param name="map.href" tunnel="yes"/>
       <xsl:choose>
       <xsl:when test="$attrName='id'">
         <xsl:attribute name="xml:id">
@@ -305,8 +356,38 @@
                 </xsl:otherwise>
             </xsl:choose>
           </xsl:variable>
-          <xsl:value-of select="$xtrf.value" />
-          <xsl:value-of select="."/>
+          
+          <!-- The xml:id for the DocBook chapter, section, or equivalent element should include the generated id for the map
+               element. This allows multiple topic references to the same section in a map (valid DITA) to result in unique IDs
+               in the resulting DocBook.-->
+          <!-- <xsl:value-of select="$map.gen.id" /> -->
+          <!-- <xsl:message>READING ID REFERENCE: <xsl:apply-templates select="$id.reference" /></xsl:message> -->
+          <!-- document('/tmp/id-reference.xml')/duplicate.hrefs/topicref[1]/@href -->
+          
+          <xsl:variable name="is.first.href">
+            <xsl:apply-templates select="$id.reference" mode="find.first.href">
+              <xsl:with-param name="map.gen.id" select="$map.gen.id" tunnel="yes" />
+              <xsl:with-param name="map.href" select="$map.href" tunnel="yes" />
+            </xsl:apply-templates>
+          </xsl:variable>
+          
+          <!--
+          <xsl:apply-templates select="$id.reference" mode="find.first.href">
+              <xsl:with-param name="map.gen.id" select="$map.gen.id" tunnel="yes" />
+              <xsl:with-param name="map.href" select="$map.href" tunnel="yes" />
+          </xsl:apply-templates>
+          -->
+          <xsl:choose>
+            <xsl:when test="not(contains($is.first.href, 'false'))">
+              <xsl:value-of select="$xtrf.value" />
+              <xsl:value-of select="."/>
+            </xsl:when>
+            <xsl:otherwise>
+              <xsl:message>Omitting xml:id attribute for an element that has been reused multiple times.</xsl:message>
+              <xsl:value-of select="generate-id()" />
+            </xsl:otherwise>
+          </xsl:choose>
+          
         </xsl:attribute>
       </xsl:when>
       <xsl:when test="$attrName='spec'">
@@ -336,6 +417,28 @@
       </xsl:when>
       <!-- leave non-standard attributes to be handled locally -->
       </xsl:choose>
+    </xsl:template>
+    
+    <!-- ********************************** -->
+    <!-- Return true if first instance of an href in a map -->
+    <!-- ********************************** -->
+    
+    <xsl:template match="*" mode="find.first.href">
+      <xsl:param name="map.gen.id" tunnel="yes" />
+      <xsl:param name="map.href" tunnel="yes"/>
+      
+      <!-- If the current element in the id reference nodeset matches the href and generated ID
+           string of the current DITA element, check to see whether any of it's preceeding siblings
+           also match the href. If there is a match earlier in the id reference nodeset, the current
+           one is not the first. -->
+      <xsl:if test="@href = $map.href and $map.gen.id = @generated.id and preceding-sibling::*[@href = $map.href]">
+        <xsl:text>false</xsl:text>
+      </xsl:if>
+      
+      <xsl:apply-templates mode="find.first.href">
+        <xsl:with-param name="map.gen.id" select="$map.gen.id" tunnel="yes" />
+        <xsl:with-param name="map.href" select="$map.href" tunnel="yes" />
+      </xsl:apply-templates>
     </xsl:template>
     
     <!-- ********************************** -->
